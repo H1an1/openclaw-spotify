@@ -339,21 +339,83 @@ if __name__ == "__main__":
 
         print(f"\nDone! Files in: {out_dir}")
 
+    elif cmd == "play":
+        # Search → download to temp → afplay
+        import subprocess, tempfile, urllib.request
+        if len(sys.argv) < 3:
+            print("Usage: netease.py play <query|track_id>")
+            sys.exit(1)
+        require_login()
+        from pyncm import apis
+
+        try:
+            track_id = int(sys.argv[2])
+            # Lookup track info
+            detail = apis.track.GetTrackDetail([track_id])
+            songs = detail.get("songs", [])
+            if songs:
+                name = songs[0].get("name", "?")
+                artists = "/".join(a["name"] for a in songs[0].get("ar", []))
+            else:
+                name, artists = str(track_id), ""
+        except ValueError:
+            query = " ".join(sys.argv[2:])
+            result = apis.cloudsearch.GetSearchResult(query, limit=1)
+            songs = result.get("result", {}).get("songs", [])
+            if not songs:
+                print(f"No results: {query}")
+                sys.exit(1)
+            track_id = songs[0]["id"]
+            name = songs[0].get("name", "?")
+            artists = "/".join(a["name"] for a in songs[0].get("ar", []))
+
+        # Get audio URL
+        audio = apis.track.GetTrackAudio([track_id], bitrate=320000)
+        audio_url = (audio.get("data", [{}])[0] or {}).get("url")
+        if not audio_url:
+            print(f"No audio URL for: {name} — may be VIP-only.")
+            sys.exit(1)
+
+        print(f"Playing: {name} — {artists}")
+        # Download to temp and play in background
+        ext = "mp3" if ".mp3" in audio_url else "m4a"
+        tmp = os.path.join(tempfile.gettempdir(), f"ears-play.{ext}")
+        urllib.request.urlretrieve(audio_url, tmp)
+        # Kill any previous afplay
+        subprocess.run(["pkill", "-f", "afplay.*ears-play"], capture_output=True)
+        subprocess.Popen(["nohup", "afplay", tmp], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, start_new_session=True)
+
     elif cmd == "play-mac":
         import subprocess
         action = sys.argv[2] if len(sys.argv) > 2 else "toggle"
-        app_name = "NeteaseMusic"
+        # Uses nowplaying-cli (brew install nowplaying-cli)
         cmds = {
-            "toggle": f'tell application "{app_name}" to playpause',
-            "play": f'tell application "{app_name}" to play',
-            "pause": f'tell application "{app_name}" to pause',
-            "next": f'tell application "{app_name}" to next track',
-            "prev": f'tell application "{app_name}" to previous track',
+            "toggle": ["nowplaying-cli", "togglePlayPause"],
+            "play": ["nowplaying-cli", "play"],
+            "pause": ["nowplaying-cli", "pause"],
+            "next": ["nowplaying-cli", "next"],
+            "prev": ["nowplaying-cli", "previous"],
+            "now": ["nowplaying-cli", "get", "title", "artist", "album"],
         }
-        if action in cmds:
-            subprocess.run(["osascript", "-e", cmds[action]])
-        else:
-            print(f"Unknown action: {action}\nActions: toggle, play, pause, next, prev")
+        if action not in cmds:
+            print(f"Unknown action: {action}\nActions: toggle, play, pause, next, prev, now")
+            sys.exit(1)
+        try:
+            r = subprocess.run(cmds[action], capture_output=True, text=True, timeout=5)
+            if action == "now":
+                lines = r.stdout.strip().split("\n")
+                title = lines[0] if lines[0] != "null" else "?"
+                artist = lines[1] if len(lines) > 1 and lines[1] != "null" else "?"
+                album = lines[2] if len(lines) > 2 and lines[2] != "null" else "?"
+                if title == "?" and artist == "?":
+                    print("Nothing playing.")
+                else:
+                    print(f"{title} — {artist} [{album}]")
+            else:
+                labels = {"toggle": "Toggled play/pause", "play": "Playing", "pause": "Paused", "next": "Next track", "prev": "Previous track"}
+                print(f"{labels[action]}.")
+        except FileNotFoundError:
+            print("nowplaying-cli not found. Install: brew install nowplaying-cli")
 
     else:
         print("""Netease Cloud Music CLI for OpenClaw
