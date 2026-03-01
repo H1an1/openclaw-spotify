@@ -51,8 +51,8 @@ def require_login():
     try:
         result = apis.login.GetCurrentLoginStatus()
         # Check various response formats
-        account = (result.get("data", {}) or {}).get("account") or result.get("account")
-        profile = (result.get("data", {}) or {}).get("profile") or result.get("profile")
+        account = result.get("account") or (result.get("data", {}) or {}).get("account")
+        profile = result.get("profile") or (result.get("data", {}) or {}).get("profile")
         if not account and not profile:
             print("Session expired. Run: netease.py login <phone>")
             sys.exit(1)
@@ -143,7 +143,7 @@ if __name__ == "__main__":
         from pyncm import apis
         try:
             result = apis.login.GetCurrentLoginStatus()
-            profile = result.get("data", {}).get("profile", {})
+            profile = result.get("profile") or (result.get("data", {}) or {}).get("profile")
             if profile:
                 print(f"Logged in as: {profile.get('nickname')} (uid: {profile.get('userId')})")
             else:

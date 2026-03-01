@@ -293,7 +293,12 @@ if __name__ == "__main__":
             name = mid
             artists = ""
         else:
-            query = " ".join(sys.argv[2:])
+            # Exclude output_dir from query
+            query_parts = sys.argv[2:]
+            if len(query_parts) > 1 and os.path.isdir(query_parts[-1]):
+                query = " ".join(query_parts[:-1])
+            else:
+                query = " ".join(query_parts)
             data = api_call(
                 "music.search.SearchCgiService",
                 "DoSearchForQQMusicDesktop",
