@@ -131,10 +131,11 @@ if __name__ == "__main__":
             print("No preview available.")
             sys.exit(1)
         print(f"Playing preview: {r.get('trackName','?')} — {r.get('artistName','?')}")
-        # Download and play
+        # Download and play in background
         tmp = "/tmp/applemusic_preview.m4a"
         urllib.request.urlretrieve(preview, tmp)
-        subprocess.run(["afplay", tmp])
+        subprocess.run(["pkill", "-f", "afplay.*applemusic_preview"], capture_output=True)
+        subprocess.Popen(["nohup", "afplay", tmp], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, start_new_session=True)
 
     elif cmd == "play":
         if len(sys.argv) < 3:
@@ -153,9 +154,8 @@ if __name__ == "__main__":
         r = results[0]
         url = r.get("trackViewUrl", "")
         print(f"Opening: {r.get('trackName','?')} — {r.get('artistName','?')}")
-        # Try Music.app URL scheme first, fallback to browser
-        import webbrowser
-        webbrowser.open(url)
+        # Open in Music.app directly
+        subprocess.run(["open", "-a", "Music", url])
 
     # --- Music.app controls (macOS only) ---
     elif cmd == "now":
